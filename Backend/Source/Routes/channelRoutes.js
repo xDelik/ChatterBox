@@ -3,7 +3,9 @@ const router = express.Router();
 const {
     getAllChannels,
     getChannelById,
-    createChannel
+    createChannel,
+    subscribeToChannel,
+    unsubscribeFromChannel
 } = require('../controllers/channelController');
 
 router.get('/', getAllChannels);
@@ -11,5 +13,7 @@ router.get('/', getAllChannels);
 router.get('/:id', getChannelById);
 
 router.post('/', createChannel);
+router.post('/:id/subscribe', subscribeToChannel);
+router.post('/:id/unsubscribe', unsubscribeFromChannel);
 
 module.exports = router;
