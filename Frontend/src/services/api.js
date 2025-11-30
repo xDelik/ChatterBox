@@ -24,8 +24,9 @@ export async function getChannelById(id) {
     return data;
 }
 
-export async function getMessagesByChannel(channelId) {
-    const response = await fetch(`${API_BASE_URL}/messages/channel/${channelId}`);
+export async function getMessagesByChannel(channelId, { limit = 15, offset = 0 } = {}) {
+    const params = new URLSearchParams({ limit, offset });
+    const response = await fetch(`${API_BASE_URL}/messages/channel/${channelId}?${params.toString()}`);
     const data = await response.json();
     return data;
 }

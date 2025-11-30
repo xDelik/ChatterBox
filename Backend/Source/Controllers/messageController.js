@@ -3,7 +3,10 @@ const { Op } = require('sequelize');
 
 const getMessagesByChannel = async (req, res) => {
     try {
-        const messages = await Message.findAll({
+        const limit = Math.min(parseInt(req.query.limit, 10) || 15, 100);
+        const offset = parseInt(req.query.offset, 10) || 0;
+
+        const { rows: messages, count } = await Message.findAndCountAll({
             where: { channelId: req.params.channelId },
             include: [
                 {
@@ -12,12 +15,16 @@ const getMessagesByChannel = async (req, res) => {
                     attributes: ['id', 'username', 'avatar']
                 }
             ],
-            order: [['createdAt', 'ASC']]
+            order: [['createdAt', 'DESC']],
+            limit,
+            offset
         });
 
         res.json({
             success: true,
             count: messages.length,
+            total: count,
+            hasMore: offset + messages.length < count,
             data: messages
         });
     } catch (error) {

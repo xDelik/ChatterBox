@@ -1,5 +1,5 @@
 <script setup>
-import { ref, defineProps, defineEmits } from 'vue';
+import { ref, defineProps, defineEmits, onMounted, watch, nextTick } from 'vue';
 import { sendMessage } from '../services/api.js';
 
 const props = defineProps({
@@ -18,6 +18,7 @@ const emit = defineEmits(['message-sent']);
 const content = ref('');
 const sending = ref(false);
 const error = ref(null);
+const inputRef = ref(null);
 
 async function handleSubmit() {
     if (!content.value.trim() || !props.channelId || !props.currentUserId) {
@@ -31,6 +32,7 @@ async function handleSubmit() {
         if (response.success) {
             content.value = '';
             emit('message-sent', response.data);
+            inputRef.value?.focus();
         } else {
             error.value = response.message;
         }
@@ -40,6 +42,21 @@ async function handleSubmit() {
         sending.value = false;
     }
 }
+
+onMounted(() => {
+    if (inputRef.value) {
+        inputRef.value.focus();
+    }
+});
+
+watch(
+    () => props.channelId,
+    () => {
+        nextTick(() => {
+            inputRef.value?.focus();
+        });
+    }
+);
 </script>
 
 <template>
@@ -54,7 +71,7 @@ async function handleSubmit() {
                     v-model="content"
                     type="text"
                     placeholder="Type a message..."
-                    :disabled="sending"
+                    ref="inputRef"
                 />
                 <button type="submit" :disabled="sending || !content.trim()">
                     {{ sending ? 'Sending...' : 'Send' }}
