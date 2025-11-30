@@ -1,5 +1,5 @@
 ﻿const { DataTypes } = require('sequelize');
-const { sequelize } = require('../config/db');
+const { sequelize } = require('../Config/db');
 
 const Channel = sequelize.define('Channel', {
     id: {

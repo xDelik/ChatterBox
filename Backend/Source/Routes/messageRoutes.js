@@ -4,7 +4,7 @@ const {
     getMessagesByChannel,
     sendMessage,
     getPrivateMessages
-} = require('../controllers/messageController');
+} = require('../Controllers/messageController');
 
 router.get('/channel/:channelId', getMessagesByChannel);
 router.get('/private/:userId1/:userId2', getPrivateMessages);

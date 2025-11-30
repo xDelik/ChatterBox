@@ -1,4 +1,4 @@
-﻿const { Channel, User, ChannelSubscription } = require('../models');
+﻿const { Channel, User, ChannelSubscription } = require('../Models');
 
 const getAllChannels = async (req, res) => {
     try {

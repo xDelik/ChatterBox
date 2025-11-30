@@ -1,4 +1,4 @@
-﻿const { Message, User, Channel } = require('../models');
+﻿const { Message, User, Channel } = require('../Models');
 const { Op } = require('sequelize');
 
 const getMessagesByChannel = async (req, res) => {

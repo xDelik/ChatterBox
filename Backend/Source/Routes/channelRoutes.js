@@ -6,7 +6,7 @@ const {
     createChannel,
     subscribeToChannel,
     unsubscribeFromChannel
-} = require('../controllers/channelController');
+} = require('../Controllers/channelController');
 
 router.get('/', getAllChannels);
 
