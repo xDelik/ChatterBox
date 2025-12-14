@@ -18,6 +18,14 @@ const newMessagesAvailable = ref(false);
 const autoScrollEnabled = ref(true);
 const lastScrollTop = ref(0);
 const messageListRef = ref(null);
+const searchTerm = ref('');
+const filterMode = ref('content');
+const matchType = ref('substring');
+const activeFilters = ref({
+    authorUsername: null,
+    contentQuery: null,
+    matchType: 'substring'
+});
 let pollingInterval = null;
 const POLL_INTERVAL_MS = 3000;
 const PAGE_SIZE = 15;
@@ -45,6 +53,23 @@ const jumpToLatest = async () => {
     scrollToLatest();
 };
 
+const buildQueryOptions = (offset = 0) => {
+    const options = {
+        limit: PAGE_SIZE,
+        offset
+    };
+
+    if (activeFilters.value.authorUsername) {
+        options.authorUsername = activeFilters.value.authorUsername;
+    }
+    if (activeFilters.value.contentQuery) {
+        options.contentQuery = activeFilters.value.contentQuery;
+        options.matchType = activeFilters.value.matchType || 'substring';
+    }
+
+    return options;
+};
+
 const updateHasMore = (response, offset, fetchedLength) => {
     if (typeof response.hasMore === 'boolean') {
         hasMore.value = response.hasMore;
@@ -69,10 +94,7 @@ async function loadInitialMessages() {
     try {
         loading.value = true;
         error.value = null;
-        const response = await getMessagesByChannel(props.channelId, {
-            limit: PAGE_SIZE,
-            offset: 0
-        });
+        const response = await getMessagesByChannel(props.channelId, buildQueryOptions(0));
         if (!response.success) {
             error.value = response.message;
             messages.value = [];
@@ -105,10 +127,7 @@ async function loadOlderMessages() {
     try {
         loadingMore.value = true;
         error.value = null;
-        const response = await getMessagesByChannel(props.channelId, {
-            limit: PAGE_SIZE,
-            offset
-        });
+        const response = await getMessagesByChannel(props.channelId, buildQueryOptions(offset));
 
         if (!response.success) {
             error.value = response.message;
@@ -137,10 +156,7 @@ async function refreshLatestMessages() {
     if (!props.channelId) return;
 
     try {
-        const response = await getMessagesByChannel(props.channelId, {
-            limit: PAGE_SIZE,
-            offset: 0
-        });
+        const response = await getMessagesByChannel(props.channelId, buildQueryOptions(0));
 
         if (!response.success) {
             error.value = response.message;
@@ -210,6 +226,48 @@ const startPolling = () => {
     pollingInterval = setInterval(refreshLatestMessages, POLL_INTERVAL_MS);
 };
 
+const applyFilters = () => {
+    const term = searchTerm.value.trim();
+
+    if (filterMode.value === 'author') {
+        activeFilters.value = {
+            authorUsername: term || null,
+            contentQuery: null,
+            matchType: 'substring'
+        };
+    } else {
+        activeFilters.value = {
+            authorUsername: null,
+            contentQuery: term || null,
+            matchType: matchType.value
+        };
+    }
+
+    messages.value = [];
+    hasMore.value = true;
+    newMessagesAvailable.value = false;
+    autoScrollEnabled.value = true;
+    lastScrollTop.value = 0;
+    loadInitialMessages();
+};
+
+const clearFilters = () => {
+    searchTerm.value = '';
+    filterMode.value = 'content';
+    matchType.value = 'substring';
+    activeFilters.value = {
+        authorUsername: null,
+        contentQuery: null,
+        matchType: 'substring'
+    };
+    messages.value = [];
+    hasMore.value = true;
+    newMessagesAvailable.value = false;
+    autoScrollEnabled.value = true;
+    lastScrollTop.value = 0;
+    loadInitialMessages();
+};
+
 watch(
     () => props.channelId,
     (channelId) => {
@@ -219,6 +277,14 @@ watch(
         newMessagesAvailable.value = false;
         autoScrollEnabled.value = true;
         lastScrollTop.value = 0;
+        searchTerm.value = '';
+        filterMode.value = 'content';
+        matchType.value = 'substring';
+        activeFilters.value = {
+            authorUsername: null,
+            contentQuery: null,
+            matchType: 'substring'
+        };
         if (!channelId) {
             return;
         }
@@ -235,6 +301,33 @@ defineExpose({ fetchMessages: refreshLatestMessages, loadInitialMessages });
 
 <template>
     <div class="message-list" ref="messageListRef" @scroll.passive="onScroll">
+        <div class="message-filters">
+            <input
+                v-model="searchTerm"
+                type="text"
+                placeholder="Filtruj wiadomości"
+                @keyup.enter="applyFilters"
+            />
+            <select v-model="filterMode">
+                <option value="content">Treść</option>
+                <option value="author">Użytkownik</option>
+            </select>
+            <select v-if="filterMode === 'content'" v-model="matchType">
+                <option value="substring">Zawiera</option>
+                <option value="prefix">Prefix</option>
+                <option value="suffix">Sufix</option>
+                <option value="exact">Dokładnie</option>
+            </select>
+            <button type="button" @click="applyFilters">Szukaj</button>
+            <button
+                v-if="activeFilters.contentQuery || activeFilters.authorUsername"
+                type="button"
+                class="clear-btn"
+                @click="clearFilters"
+            >
+                Wyczyść
+            </button>
+        </div>
         <div
             v-if="newMessagesAvailable"
             class="new-messages-banner"
@@ -276,6 +369,51 @@ defineExpose({ fetchMessages: refreshLatestMessages, loadInitialMessages });
     height: 300px;
     overflow-y: auto;
     position: relative;
+    background: #fff;
+}
+
+.message-filters {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    background: #fff;
+    padding: 6px 0;
+    z-index: 2;
+}
+
+.message-filters input {
+    flex: 1;
+    min-width: 180px;
+    padding: 6px 8px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}
+
+.message-filters select,
+.message-filters button {
+    padding: 6px 8px;
+    border-radius: 4px;
+    border: 1px solid #ccc;
+    background: #f9f9f9;
+    cursor: pointer;
+}
+
+.message-filters button:hover {
+    background: #f0f0f0;
+}
+
+.clear-btn {
+    border-color: #e0e0e0;
+    background: #fff;
+    color: #444;
+}
+
+.clear-btn:hover {
+    background: #f6f6f6;
 }
 
 .placeholder {
@@ -336,7 +474,7 @@ defineExpose({ fetchMessages: refreshLatestMessages, loadInitialMessages });
 
 .new-messages-banner {
     position: sticky;
-    top: 0;
+    top: 52px;
     margin: 0 auto 8px;
     background: #1e88e5;
     color: #fff;

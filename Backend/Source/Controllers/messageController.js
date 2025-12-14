@@ -1,23 +1,55 @@
 ﻿const { Message, User, Channel } = require('../Models');
 const { Op } = require('sequelize');
 
+const buildContentFilter = (query = '', matchType = 'substring') => {
+    const sanitized = query.trim();
+    if (!sanitized) return null;
+
+    switch (matchType) {
+        case 'prefix':
+            return { [Op.iLike]: `${sanitized}%` };
+        case 'suffix':
+            return { [Op.iLike]: `%${sanitized}` };
+        case 'exact':
+            return { [Op.iLike]: sanitized };
+        case 'substring':
+        default:
+            return { [Op.iLike]: `%${sanitized}%` };
+    }
+};
+
 const getMessagesByChannel = async (req, res) => {
     try {
         const limit = Math.min(parseInt(req.query.limit, 10) || 15, 100);
         const offset = parseInt(req.query.offset, 10) || 0;
 
+        const { authorUsername, contentQuery, matchType = 'substring' } = req.query;
+
+        const where = { channelId: req.params.channelId };
+        const include = [
+            {
+                model: User,
+                as: 'author',
+                attributes: ['id', 'username', 'avatar'],
+                required: Boolean(authorUsername),
+                ...(authorUsername
+                    ? { where: { username: { [Op.iLike]: authorUsername.trim() } } }
+                    : {})
+            }
+        ];
+
+        const contentFilter = buildContentFilter(contentQuery, matchType);
+        if (contentFilter) {
+            where.content = contentFilter;
+        }
+
         const { rows: messages, count } = await Message.findAndCountAll({
-            where: { channelId: req.params.channelId },
-            include: [
-                {
-                    model: User,
-                    as: 'author',
-                    attributes: ['id', 'username', 'avatar']
-                }
-            ],
+            where,
+            include,
             order: [['createdAt', 'DESC']],
             limit,
-            offset
+            offset,
+            distinct: true
         });
 
         res.json({
