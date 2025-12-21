@@ -62,19 +62,23 @@ watch(
 <template>
     <div class="message-form">
         <div v-if="!channelId || !currentUserId" class="placeholder">
-            Select a channel and user to send messages
+            <span class="prefix">[?]</span> Select a channel and user to enable input
         </div>
         <form v-else @submit.prevent="handleSubmit">
-            <div v-if="error" class="error">{{ error }}</div>
+            <div v-if="error" class="error-line">
+                <span class="prefix">[!]</span> {{ error }}
+            </div>
             <div class="input-row">
+                <span class="prompt">&gt;</span>
                 <input
                     v-model="content"
                     type="text"
-                    placeholder="Type a message..."
+                    :placeholder="sending ? 'sending...' : 'enter message...'"
                     ref="inputRef"
+                    :disabled="sending"
                 />
                 <button type="submit" :disabled="sending || !content.trim()">
-                    {{ sending ? 'Sending...' : 'Send' }}
+                    [{{ sending ? 'WAIT' : 'SEND' }}]
                 </button>
             </div>
         </form>
@@ -83,49 +87,81 @@ watch(
 
 <style scoped>
 .message-form {
-    border: 1px solid #ccc;
-    padding: 10px;
-    border-radius: 4px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--border-dim);
+    background-color: var(--bg-tertiary);
 }
 
 .placeholder {
-    color: #666;
-    text-align: center;
-    padding: 10px;
+    color: var(--text-dim);
+    padding: 4px 0;
+}
+
+.prefix {
+    color: var(--text-dim);
+    margin-right: 8px;
+}
+
+.error-line {
+    color: var(--error);
+    margin-bottom: 8px;
+    font-size: 0.9em;
 }
 
 .input-row {
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 8px;
+}
+
+.prompt {
+    color: var(--text-bright);
+    font-weight: 600;
 }
 
 input {
     flex: 1;
-    padding: 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    padding: 8px 12px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-dim);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: inherit;
+}
+
+input:focus {
+    outline: none;
+    border-color: var(--text-primary);
+    box-shadow: 0 0 5px var(--text-dim);
+}
+
+input::placeholder {
+    color: var(--text-dim);
+}
+
+input:disabled {
+    opacity: 0.6;
 }
 
 button {
     padding: 8px 16px;
-    background-color: #4caf50;
-    color: white;
-    border: none;
-    border-radius: 4px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--text-primary);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: inherit;
     cursor: pointer;
+    transition: all 0.1s;
 }
 
 button:hover:not(:disabled) {
-    background-color: #45a049;
+    background-color: var(--selection-bg);
+    box-shadow: 0 0 10px var(--text-dim);
 }
 
 button:disabled {
-    background-color: #ccc;
+    border-color: var(--border-dim);
+    color: var(--text-dim);
     cursor: not-allowed;
-}
-
-.error {
-    color: red;
-    margin-bottom: 10px;
 }
 </style>

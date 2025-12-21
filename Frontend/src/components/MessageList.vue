@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch, defineProps, nextTick, onBeforeUnmount } from 'vue';
+import { ref, watch, defineProps, nextTick, onBeforeUnmount, computed } from 'vue';
 import { getMessagesByChannel } from '../services/api.js';
 
 const props = defineProps({
@@ -80,6 +80,19 @@ const updateHasMore = (response, offset, fetchedLength) => {
         return;
     }
     hasMore.value = fetchedLength === PAGE_SIZE;
+};
+
+const formatTimestamp = (dateStr) => {
+    const date = new Date(dateStr);
+    return date.toLocaleString('en-US', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false
+    }).replace(',', '');
 };
 
 async function loadInitialMessages() {
@@ -268,6 +281,10 @@ const clearFilters = () => {
     loadInitialMessages();
 };
 
+const hasActiveFilters = computed(() => {
+    return activeFilters.value.contentQuery || activeFilters.value.authorUsername;
+});
+
 watch(
     () => props.channelId,
     (channelId) => {
@@ -300,195 +317,241 @@ defineExpose({ fetchMessages: refreshLatestMessages, loadInitialMessages });
 </script>
 
 <template>
-    <div class="message-list" ref="messageListRef" @scroll.passive="onScroll">
-        <div class="message-filters">
+    <div class="message-container">
+        <div class="filter-bar">
+            <span class="filter-prompt">grep:</span>
             <input
                 v-model="searchTerm"
                 type="text"
-                placeholder="Filtruj wiadomości"
+                placeholder="search pattern..."
                 @keyup.enter="applyFilters"
             />
             <select v-model="filterMode">
-                <option value="content">Treść</option>
-                <option value="author">Użytkownik</option>
+                <option value="content">--content</option>
+                <option value="author">--author</option>
             </select>
             <select v-if="filterMode === 'content'" v-model="matchType">
-                <option value="substring">Zawiera</option>
-                <option value="prefix">Prefix</option>
-                <option value="suffix">Sufix</option>
-                <option value="exact">Dokładnie</option>
+                <option value="substring">*match*</option>
+                <option value="prefix">match*</option>
+                <option value="suffix">*match</option>
+                <option value="exact">=match</option>
             </select>
-            <button type="button" @click="applyFilters">Szukaj</button>
+            <button type="button" @click="applyFilters">[EXEC]</button>
             <button
-                v-if="activeFilters.contentQuery || activeFilters.authorUsername"
+                v-if="hasActiveFilters"
                 type="button"
                 class="clear-btn"
                 @click="clearFilters"
-            >
-                Wyczyść
-            </button>
+            >[CLR]</button>
         </div>
-        <div
-            v-if="newMessagesAvailable"
-            class="new-messages-banner"
-            @click="jumpToLatest"
-        >
-            New messages. Click to jump ↓
-        </div>
-        <div v-if="!channelId" class="placeholder">
-            Select a channel to view messages
-        </div>
-        <div v-else-if="loading && messages.length === 0">Loading messages...</div>
-        <div v-else-if="error && messages.length === 0" class="error">{{ error }}</div>
-        <div v-else-if="messages.length === 0" class="placeholder">
-            No messages in this channel yet
-        </div>
-        <div v-else class="messages">
-            <div v-if="error" class="inline-error">{{ error }}</div>
-            <div v-if="loadingMore" class="loading-more">Loading more messages...</div>
+
+        <div class="message-list" ref="messageListRef" @scroll.passive="onScroll">
             <div
-                v-for="message in messages"
-                :key="message.id"
-                class="message"
+                v-if="newMessagesAvailable"
+                class="new-messages-banner"
+                @click="jumpToLatest"
             >
-                <div class="message-header">
-                    <span class="author">{{ message.author?.username || 'Unknown' }}</span>
-                    <span class="time">{{ new Date(message.createdAt).toLocaleString() }}</span>
+                [!] New messages available -- press to scroll down
+            </div>
+
+            <div v-if="!channelId" class="placeholder">
+                <span class="prefix">[?]</span> Select a channel to view message log
+            </div>
+            <div v-else-if="loading && messages.length === 0" class="status-line">
+                <span class="prefix">[*]</span> Loading messages...
+            </div>
+            <div v-else-if="error && messages.length === 0" class="status-line error">
+                <span class="prefix">[!]</span> {{ error }}
+            </div>
+            <div v-else-if="messages.length === 0" class="placeholder">
+                <span class="prefix">[-]</span> No messages in buffer
+            </div>
+            <div v-else class="messages">
+                <div v-if="error" class="inline-error">
+                    <span class="prefix">[!]</span> {{ error }}
                 </div>
-                <div class="message-content">{{ message.content }}</div>
+                <div v-if="loadingMore" class="loading-more">
+                    <span class="prefix">[*]</span> Loading older messages...
+                </div>
+                <div
+                    v-for="message in messages"
+                    :key="message.id"
+                    class="message"
+                >
+                    <span class="timestamp">[{{ formatTimestamp(message.createdAt) }}]</span>
+                    <span class="author">&lt;{{ message.author?.username || 'unknown' }}&gt;</span>
+                    <span class="content">{{ message.content }}</span>
+                </div>
             </div>
         </div>
     </div>
 </template>
 
 <style scoped>
-.message-list {
-    border: 1px solid #ccc;
-    padding: 10px;
-    border-radius: 4px;
-    height: 300px;
-    overflow-y: auto;
-    position: relative;
-    background: #fff;
+.message-container {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
 }
 
-.message-filters {
+.filter-bar {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 10px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-dim);
+    background-color: var(--bg-tertiary);
     flex-wrap: wrap;
-    position: sticky;
-    top: 0;
-    background: #fff;
-    padding: 6px 0;
-    z-index: 2;
 }
 
-.message-filters input {
+.filter-prompt {
+    color: var(--accent);
+    font-weight: 500;
+}
+
+.filter-bar input {
     flex: 1;
-    min-width: 180px;
-    padding: 6px 8px;
-    border: 1px solid #ccc;
-    border-radius: 4px;
+    min-width: 150px;
+    padding: 4px 8px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-dim);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: inherit;
 }
 
-.message-filters select,
-.message-filters button {
-    padding: 6px 8px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-    background: #f9f9f9;
+.filter-bar input:focus {
+    outline: none;
+    border-color: var(--text-primary);
+    box-shadow: 0 0 5px var(--text-dim);
+}
+
+.filter-bar input::placeholder {
+    color: var(--text-dim);
+}
+
+.filter-bar select {
+    padding: 4px 8px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-dim);
+    color: var(--text-secondary);
+    font-family: inherit;
+    font-size: inherit;
     cursor: pointer;
 }
 
-.message-filters button:hover {
-    background: #f0f0f0;
+.filter-bar select:focus {
+    outline: none;
+    border-color: var(--text-primary);
 }
 
-.clear-btn {
-    border-color: #e0e0e0;
-    background: #fff;
-    color: #444;
+.filter-bar button {
+    padding: 4px 12px;
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-dim);
+    color: var(--text-primary);
+    font-family: inherit;
+    font-size: inherit;
+    cursor: pointer;
+    transition: all 0.1s;
 }
 
-.clear-btn:hover {
-    background: #f6f6f6;
+.filter-bar button:hover {
+    background-color: var(--selection-bg);
+    border-color: var(--text-primary);
+}
+
+.filter-bar .clear-btn {
+    color: var(--warning);
+    border-color: var(--warning);
+}
+
+.filter-bar .clear-btn:hover {
+    background-color: rgba(255, 170, 0, 0.1);
+}
+
+.message-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 10px 12px;
+    background-color: var(--bg-secondary);
 }
 
 .placeholder {
-    color: #666;
-    text-align: center;
+    color: var(--text-dim);
     padding: 20px;
+}
+
+.status-line {
+    color: var(--text-secondary);
+    padding: 8px 0;
+}
+
+.status-line.error {
+    color: var(--error);
+}
+
+.prefix {
+    color: var(--text-dim);
+    margin-right: 8px;
 }
 
 .messages {
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 2px;
 }
 
 .message {
-    padding: 8px;
-    background-color: #f9f9f9;
-    border-radius: 4px;
+    padding: 2px 0;
+    line-height: 1.5;
+    word-break: break-word;
 }
 
-.message-header {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 4px;
+.timestamp {
+    color: var(--text-dim);
+    margin-right: 8px;
 }
 
 .author {
-    font-weight: bold;
-    color: #333;
+    color: var(--accent);
+    margin-right: 8px;
+    font-weight: 500;
 }
 
-.time {
-    color: #888;
-    font-size: 0.85em;
-}
-
-.message-content {
-    color: #444;
-}
-
-.error {
-    color: red;
+.content {
+    color: var(--text-primary);
 }
 
 .inline-error {
-    color: #d14343;
-    background: #fde8e8;
-    border: 1px solid #f5c2c2;
-    padding: 6px 8px;
-    border-radius: 4px;
+    color: var(--error);
+    padding: 6px 0;
+    border-bottom: 1px solid var(--border-dim);
+    margin-bottom: 8px;
 }
 
 .loading-more {
+    color: var(--text-secondary);
+    padding: 6px 0;
     text-align: center;
-    color: #888;
-    font-size: 0.9em;
 }
 
 .new-messages-banner {
     position: sticky;
-    top: 52px;
-    margin: 0 auto 8px;
-    background: #1e88e5;
-    color: #fff;
-    padding: 8px 14px;
-    border-radius: 18px;
+    top: 0;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 8px 12px;
+    margin-bottom: 10px;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    z-index: 2;
-    border: 1px solid rgba(255, 255, 255, 0.35);
     text-align: center;
-    max-width: 240px;
+    transition: all 0.1s;
 }
 
 .new-messages-banner:hover {
-    background: #156cb6;
+    background-color: var(--selection-bg);
+    color: var(--text-bright);
 }
 </style>
