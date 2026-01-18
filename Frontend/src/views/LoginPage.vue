@@ -6,13 +6,13 @@ import { useAuth } from '../stores/auth.js';
 const router = useRouter();
 const { login } = useAuth();
 
-const username = ref('');
+const email = ref('');
 const password = ref('');
 const loading = ref(false);
 const error = ref(null);
 
 async function handleSubmit() {
-    if (!username.value || !password.value) {
+    if (!email.value || !password.value) {
         error.value = 'All fields required';
         return;
     }
@@ -20,7 +20,7 @@ async function handleSubmit() {
     loading.value = true;
     error.value = null;
 
-    const result = await login(username.value, password.value);
+    const result = await login(email.value, password.value);
 
     if (result.success) {
         router.push('/');
@@ -60,11 +60,11 @@ async function handleSubmit() {
 
                 <form @submit.prevent="handleSubmit" class="login-form">
                     <div class="prompt-line">
-                        <span class="prompt">login:</span>
+                        <span class="prompt">email:</span>
                         <input
-                            v-model="username"
-                            type="text"
-                            placeholder="username"
+                            v-model="email"
+                            type="email"
+                            placeholder="user@example.com"
                             :disabled="loading"
                             autofocus
                         />
