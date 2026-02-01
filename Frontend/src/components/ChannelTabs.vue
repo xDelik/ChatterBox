@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, defineEmits, computed } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { getChannels } from '../services/api.js';
+import { getChannels, createChannel as apiCreateChannel } from '../services/api.js';
 import { useAuth } from '../stores/auth.js';
 
 const route = useRoute();
@@ -48,16 +48,11 @@ async function createChannel() {
 
     creating.value = true;
     try {
-        const response = await fetch('http://localhost:5000/api/channels', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: newChannelName.value.trim(),
-                description: newChannelDesc.value.trim(),
-                createdBy: user.value.id
-            })
-        });
-        const data = await response.json();
+        const data = await apiCreateChannel(
+            newChannelName.value.trim(),
+            newChannelDesc.value.trim(),
+            user.value.id
+        );
 
         if (data.success) {
             newChannelName.value = '';
