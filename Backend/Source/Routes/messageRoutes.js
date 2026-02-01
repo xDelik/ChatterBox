@@ -5,9 +5,10 @@ const {
     sendMessage,
     getPrivateMessages
 } = require('../Controllers/messageController');
+const { protect } = require('../Middleware/authMiddleware');
 
-router.get('/channel/:channelId', getMessagesByChannel);
-router.get('/private/:userId1/:userId2', getPrivateMessages);
-router.post('/', sendMessage);
+router.get('/channel/:channelId', protect, getMessagesByChannel);
+router.get('/private/:userId1/:userId2', protect, getPrivateMessages);
+router.post('/', protect, sendMessage);
 
 module.exports = router;

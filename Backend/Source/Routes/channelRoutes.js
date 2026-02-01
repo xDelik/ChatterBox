@@ -7,13 +7,12 @@ const {
     subscribeToChannel,
     unsubscribeFromChannel
 } = require('../Controllers/channelController');
+const { protect } = require('../Middleware/authMiddleware');
 
-router.get('/', getAllChannels);
-
-router.get('/:id', getChannelById);
-
-router.post('/', createChannel);
-router.post('/:id/subscribe', subscribeToChannel);
-router.post('/:id/unsubscribe', unsubscribeFromChannel);
+router.get('/', protect, getAllChannels);
+router.get('/:id', protect, getChannelById);
+router.post('/', protect, createChannel);
+router.post('/:id/subscribe', protect, subscribeToChannel);
+router.post('/:id/unsubscribe', protect, unsubscribeFromChannel);
 
 module.exports = router;

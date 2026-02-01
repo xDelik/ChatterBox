@@ -1,4 +1,5 @@
 ﻿const { User } = require('../Models');
+const generateToken = require('../Utils/generateToken');
 
 const registerUser = async (req, res) => {
     try {
@@ -30,9 +31,18 @@ const registerUser = async (req, res) => {
             password
         });
 
+        const userResponse = {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt
+        };
+
         res.status(201).json({
             success: true,
-            data: user
+            data: userResponse,
+            token: generateToken(user.id)
         });
 
     } catch (error) {
@@ -72,9 +82,18 @@ const loginUser = async (req, res) => {
             });
         }
 
+        const userResponse = {
+            id: user.id,
+            username: user.username,
+            email: user.email,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt
+        };
+
         res.json({
             success: true,
-            data: user
+            data: userResponse,
+            token: generateToken(user.id)
         });
 
     } catch (error) {
@@ -83,6 +102,13 @@ const loginUser = async (req, res) => {
             message: error.message
         });
     }
+};
+
+const getMe = async (req, res) => {
+    res.json({
+        success: true,
+        data: req.user
+    });
 };
 
 const getAllUsers = async (req, res) => {
@@ -134,6 +160,7 @@ const getUserById = async (req, res) => {
 module.exports = {
     registerUser,
     loginUser,
+    getMe,
     getAllUsers,
     getUserById
 };

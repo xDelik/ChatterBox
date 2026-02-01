@@ -1,27 +1,62 @@
 const API_BASE_URL = 'http://localhost:5000/api';
 
-export async function getUsers() {
-    const response = await fetch(`${API_BASE_URL}/users`);
+function getToken() {
+    return localStorage.getItem('chatterbox_token');
+}
+
+function getAuthHeaders() {
+    const token = getToken();
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    return headers;
+}
+
+async function handleResponse(response) {
     const data = await response.json();
+    if (response.status === 401) {
+        localStorage.removeItem('chatterbox_user');
+        localStorage.removeItem('chatterbox_token');
+        window.location.href = '/login';
+        return data;
+    }
     return data;
+}
+
+export async function getUsers() {
+    const response = await fetch(`${API_BASE_URL}/users`, {
+        headers: getAuthHeaders()
+    });
+    return handleResponse(response);
 }
 
 export async function getUserById(id) {
-    const response = await fetch(`${API_BASE_URL}/users/${id}`);
-    const data = await response.json();
-    return data;
+    const response = await fetch(`${API_BASE_URL}/users/${id}`, {
+        headers: getAuthHeaders()
+    });
+    return handleResponse(response);
+}
+
+export async function getMe() {
+    const response = await fetch(`${API_BASE_URL}/users/me`, {
+        headers: getAuthHeaders()
+    });
+    return handleResponse(response);
 }
 
 export async function getChannels() {
-    const response = await fetch(`${API_BASE_URL}/channels`);
-    const data = await response.json();
-    return data;
+    const response = await fetch(`${API_BASE_URL}/channels`, {
+        headers: getAuthHeaders()
+    });
+    return handleResponse(response);
 }
 
 export async function getChannelById(id) {
-    const response = await fetch(`${API_BASE_URL}/channels/${id}`);
-    const data = await response.json();
-    return data;
+    const response = await fetch(`${API_BASE_URL}/channels/${id}`, {
+        headers: getAuthHeaders()
+    });
+    return handleResponse(response);
 }
 
 export async function getMessagesByChannel(
@@ -34,31 +69,26 @@ export async function getMessagesByChannel(
     if (contentQuery) params.append('contentQuery', contentQuery);
     if (matchType) params.append('matchType', matchType);
 
-    const response = await fetch(`${API_BASE_URL}/messages/channel/${channelId}?${params.toString()}`);
-    const data = await response.json();
-    return data;
+    const response = await fetch(`${API_BASE_URL}/messages/channel/${channelId}?${params.toString()}`, {
+        headers: getAuthHeaders()
+    });
+    return handleResponse(response);
 }
 
 export async function sendMessage(content, authorId, channelId) {
     const response = await fetch(`${API_BASE_URL}/messages`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ content, authorId, channelId })
     });
-    const data = await response.json();
-    return data;
+    return handleResponse(response);
 }
 
 export async function createChannel(name, description, createdBy) {
     const response = await fetch(`${API_BASE_URL}/channels`, {
         method: 'POST',
-        headers: {
-            'Content-Type': 'application/json'
-        },
+        headers: getAuthHeaders(),
         body: JSON.stringify({ name, description, createdBy })
     });
-    const data = await response.json();
-    return data;
+    return handleResponse(response);
 }
