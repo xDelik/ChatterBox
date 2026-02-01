@@ -1,3 +1,5 @@
+import { disconnectSocket } from './socket.js';
+
 const API_BASE_URL = 'http://localhost:5000/api';
 
 function getToken() {
@@ -18,6 +20,7 @@ async function handleResponse(response) {
     if (response.status === 401) {
         localStorage.removeItem('chatterbox_user');
         localStorage.removeItem('chatterbox_token');
+        disconnectSocket();
         window.location.href = '/login';
         return data;
     }

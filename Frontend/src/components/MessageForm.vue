@@ -1,6 +1,6 @@
 <script setup>
-import { ref, defineProps, defineEmits, onMounted, watch, nextTick } from 'vue';
-import { sendMessage } from '../services/api.js';
+import { ref, defineProps, onMounted, watch, nextTick } from 'vue';
+import { getSocket, connectSocket } from '../services/socket.js';
 
 const props = defineProps({
     channelId: {
@@ -13,12 +13,11 @@ const props = defineProps({
     }
 });
 
-const emit = defineEmits(['message-sent']);
-
 const content = ref('');
 const sending = ref(false);
 const error = ref(null);
 const inputRef = ref(null);
+const socket = getSocket();
 
 async function handleSubmit() {
     if (!content.value.trim() || !props.channelId || !props.currentUserId) {
@@ -28,18 +27,43 @@ async function handleSubmit() {
     try {
         sending.value = true;
         error.value = null;
-        const response = await sendMessage(content.value, props.currentUserId, props.channelId);
-        if (response.success) {
-            content.value = '';
-            emit('message-sent', response.data);
-            inputRef.value?.focus();
-        } else {
-            error.value = response.message;
+        try {
+            await connectSocket();
+        } catch (e) {
+            error.value = e?.message || 'Socket connection failed';
+            return;
         }
+        await new Promise((resolve) => {
+            const timeoutId = setTimeout(() => {
+                error.value = 'Message send timed out';
+                resolve();
+            }, 5000);
+
+            socket.emit(
+                'send-message',
+                {
+                    content: content.value,
+                    channelId: props.channelId
+                },
+                (response) => {
+                    clearTimeout(timeoutId);
+                    if (response?.success) {
+                        content.value = '';
+                        inputRef.value?.focus();
+                    } else {
+                        error.value = response?.message || 'Failed to send message';
+                    }
+                    resolve();
+                }
+            );
+        });
     } catch (e) {
         error.value = 'Failed to send message';
     } finally {
         sending.value = false;
+        nextTick(() => {
+            inputRef.value?.focus();
+        });
     }
 }
 

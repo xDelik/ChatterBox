@@ -1,4 +1,5 @@
 import { ref, computed } from 'vue';
+import { disconnectSocket } from '../services/socket.js';
 
 const currentUser = ref(null);
 const authToken = ref(null);
@@ -62,6 +63,7 @@ export const useAuth = () => {
         authToken.value = null;
         localStorage.removeItem('chatterbox_user');
         localStorage.removeItem('chatterbox_token');
+        disconnectSocket();
     };
 
     return {

@@ -18,38 +18,57 @@ const buildContentFilter = (query = '', matchType = 'substring') => {
     }
 };
 
+const fetchMessagesByChannel = async ({
+    channelId,
+    limit = 15,
+    offset = 0,
+    authorUsername,
+    contentQuery,
+    matchType = 'substring'
+}) => {
+    const safeLimit = Math.min(parseInt(limit, 10) || 15, 100);
+    const safeOffset = parseInt(offset, 10) || 0;
+
+    const where = { channelId };
+    const include = [
+        {
+            model: User,
+            as: 'author',
+            attributes: ['id', 'username', 'avatar'],
+            required: Boolean(authorUsername),
+            ...(authorUsername
+                ? { where: { username: { [Op.iLike]: authorUsername.trim() } } }
+                : {})
+        }
+    ];
+
+    const contentFilter = buildContentFilter(contentQuery, matchType);
+    if (contentFilter) {
+        where.content = contentFilter;
+    }
+
+    const { rows: messages, count } = await Message.findAndCountAll({
+        where,
+        include,
+        order: [['createdAt', 'DESC']],
+        limit: safeLimit,
+        offset: safeOffset,
+        distinct: true
+    });
+
+    return { messages, count, limit: safeLimit, offset: safeOffset };
+};
+
 const getMessagesByChannel = async (req, res) => {
     try {
-        const limit = Math.min(parseInt(req.query.limit, 10) || 15, 100);
-        const offset = parseInt(req.query.offset, 10) || 0;
-
         const { authorUsername, contentQuery, matchType = 'substring' } = req.query;
-
-        const where = { channelId: req.params.channelId };
-        const include = [
-            {
-                model: User,
-                as: 'author',
-                attributes: ['id', 'username', 'avatar'],
-                required: Boolean(authorUsername),
-                ...(authorUsername
-                    ? { where: { username: { [Op.iLike]: authorUsername.trim() } } }
-                    : {})
-            }
-        ];
-
-        const contentFilter = buildContentFilter(contentQuery, matchType);
-        if (contentFilter) {
-            where.content = contentFilter;
-        }
-
-        const { rows: messages, count } = await Message.findAndCountAll({
-            where,
-            include,
-            order: [['createdAt', 'DESC']],
-            limit,
-            offset,
-            distinct: true
+        const { messages, count, limit, offset } = await fetchMessagesByChannel({
+            channelId: req.params.channelId,
+            limit: req.query.limit,
+            offset: req.query.offset,
+            authorUsername,
+            contentQuery,
+            matchType
         });
 
         res.json({
@@ -65,6 +84,25 @@ const getMessagesByChannel = async (req, res) => {
             message: error.message
         });
     }
+};
+
+const createMessageWithAuthor = async ({ content, authorId, channelId, receiverId }) => {
+    const message = await Message.create({
+        content,
+        authorId,
+        channelId: channelId || null,
+        receiverId: receiverId || null
+    });
+
+    return Message.findByPk(message.id, {
+        include: [
+            {
+                model: User,
+                as: 'author',
+                attributes: ['id', 'username', 'avatar']
+            }
+        ]
+    });
 };
 
 const sendMessage = async (req, res) => {
@@ -85,21 +123,11 @@ const sendMessage = async (req, res) => {
             });
         }
 
-        const message = await Message.create({
+        const messageWithAuthor = await createMessageWithAuthor({
             content,
             authorId,
-            channelId: channelId || null,
-            receiverId: receiverId || null
-        });
-
-        const messageWithAuthor = await Message.findByPk(message.id, {
-            include: [
-                {
-                    model: User,
-                    as: 'author',
-                    attributes: ['id', 'username', 'avatar']
-                }
-            ]
+            channelId,
+            receiverId
         });
 
         res.status(201).json({
@@ -160,5 +188,8 @@ const getPrivateMessages = async (req, res) => {
 module.exports = {
     getMessagesByChannel,
     sendMessage,
-    getPrivateMessages
+    getPrivateMessages,
+    createMessageWithAuthor,
+    fetchMessagesByChannel,
+    buildContentFilter
 };

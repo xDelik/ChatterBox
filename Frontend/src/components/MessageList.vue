@@ -1,6 +1,7 @@
 <script setup>
 import { ref, watch, defineProps, nextTick, onBeforeUnmount, computed } from 'vue';
 import { getMessagesByChannel } from '../services/api.js';
+import { getSocket, connectSocket } from '../services/socket.js';
 
 const props = defineProps({
     channelId: {
@@ -26,10 +27,11 @@ const activeFilters = ref({
     contentQuery: null,
     matchType: 'substring'
 });
-let pollingInterval = null;
-const POLL_INTERVAL_MS = 3000;
-const PAGE_SIZE = 15;
+const DEFAULT_PAGE_SIZE = 15;
+const pageSize = ref(DEFAULT_PAGE_SIZE);
 const BOTTOM_THRESHOLD = 5;
+const socket = getSocket();
+let activeChannelId = null;
 
 const normalizeMessages = (list = []) =>
     [...list].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -55,7 +57,7 @@ const jumpToLatest = async () => {
 
 const buildQueryOptions = (offset = 0) => {
     const options = {
-        limit: PAGE_SIZE,
+        limit: pageSize.value,
         offset
     };
 
@@ -79,7 +81,7 @@ const updateHasMore = (response, offset, fetchedLength) => {
         hasMore.value = offset + fetchedLength < response.total;
         return;
     }
-    hasMore.value = fetchedLength === PAGE_SIZE;
+    hasMore.value = fetchedLength === pageSize.value;
 };
 
 const formatTimestamp = (dateStr) => {
@@ -93,6 +95,51 @@ const formatTimestamp = (dateStr) => {
         second: '2-digit',
         hour12: false
     }).replace(',', '');
+};
+
+const matchesActiveFilters = (message) => {
+    const { authorUsername, contentQuery, matchType: activeMatchType } = activeFilters.value;
+
+    if (authorUsername) {
+        const author = message.author?.username || '';
+        if (author.toLowerCase() !== authorUsername.toLowerCase()) {
+            return false;
+        }
+    }
+
+    if (contentQuery) {
+        const haystack = (message.content || '').toLowerCase();
+        const needle = contentQuery.toLowerCase();
+        switch (activeMatchType) {
+            case 'prefix':
+                if (!haystack.startsWith(needle)) return false;
+                break;
+            case 'suffix':
+                if (!haystack.endsWith(needle)) return false;
+                break;
+            case 'exact':
+                if (haystack !== needle) return false;
+                break;
+            case 'substring':
+            default:
+                if (!haystack.includes(needle)) return false;
+                break;
+        }
+    }
+
+    return true;
+};
+
+const calculatePageSize = () => {
+    const container = messageListRef.value;
+    if (!container) {
+        pageSize.value = DEFAULT_PAGE_SIZE;
+        return;
+    }
+
+    const estimatedRowHeight = 24;
+    const visibleRows = Math.max(1, Math.floor(container.clientHeight / estimatedRowHeight));
+    pageSize.value = Math.max(DEFAULT_PAGE_SIZE, visibleRows * 2);
 };
 
 async function loadInitialMessages() {
@@ -140,7 +187,20 @@ async function loadOlderMessages() {
     try {
         loadingMore.value = true;
         error.value = null;
-        const response = await getMessagesByChannel(props.channelId, buildQueryOptions(offset));
+        try {
+            await connectSocket();
+        } catch (e) {
+            error.value = e?.message || 'Socket connection failed';
+            return;
+        }
+
+        const response = await new Promise((resolve) => {
+            socket.emit(
+                'messages:history',
+                { channelId: props.channelId, ...buildQueryOptions(offset) },
+                (payload) => resolve(payload)
+            );
+        });
 
         if (!response.success) {
             error.value = response.message;
@@ -165,39 +225,20 @@ async function loadOlderMessages() {
     }
 }
 
-async function refreshLatestMessages() {
-    if (!props.channelId) return;
+const handleIncomingMessage = async (message) => {
+    if (!message || `${message.channelId}` !== `${props.channelId}`) return;
+    if (messages.value.some((m) => m.id === message.id)) return;
+    if (!matchesActiveFilters(message)) return;
 
-    try {
-        const response = await getMessagesByChannel(props.channelId, buildQueryOptions(0));
-
-        if (!response.success) {
-            error.value = response.message;
-            return;
-        }
-
-        const normalized = normalizeMessages(response.data);
-        const existingIds = new Set(messages.value.map((m) => m.id));
-        const newOnes = normalized.filter((m) => !existingIds.has(m.id));
-
-        if (newOnes.length) {
-            messages.value = [...messages.value, ...newOnes];
-            await nextTick();
-            if (autoScrollEnabled.value) {
-                scrollToLatest();
-                newMessagesAvailable.value = false;
-            } else {
-                newMessagesAvailable.value = true;
-            }
-        }
-
-        if (typeof response.total === 'number' && messages.value.length < response.total) {
-            hasMore.value = true;
-        }
-    } catch (e) {
-        error.value = 'Failed to fetch messages';
+    messages.value = [...messages.value, message];
+    await nextTick();
+    if (autoScrollEnabled.value) {
+        scrollToLatest();
+        newMessagesAvailable.value = false;
+    } else {
+        newMessagesAvailable.value = true;
     }
-}
+};
 
 const onScroll = () => {
     const container = messageListRef.value;
@@ -224,19 +265,6 @@ const onScroll = () => {
     if (container.scrollTop <= 10) {
         loadOlderMessages();
     }
-};
-
-const stopPolling = () => {
-    if (pollingInterval) {
-        clearInterval(pollingInterval);
-        pollingInterval = null;
-    }
-};
-
-const startPolling = () => {
-    stopPolling();
-    if (!props.channelId) return;
-    pollingInterval = setInterval(refreshLatestMessages, POLL_INTERVAL_MS);
 };
 
 const applyFilters = () => {
@@ -288,7 +316,10 @@ const hasActiveFilters = computed(() => {
 watch(
     () => props.channelId,
     (channelId) => {
-        stopPolling();
+        if (activeChannelId) {
+            socket.emit('leave-channel', { channelId: activeChannelId });
+        }
+        activeChannelId = null;
         messages.value = [];
         hasMore.value = true;
         newMessagesAvailable.value = false;
@@ -305,15 +336,38 @@ watch(
         if (!channelId) {
             return;
         }
-        loadInitialMessages();
-        startPolling();
+        activeChannelId = channelId;
+        socket.emit('join-channel', { channelId });
+        nextTick(() => {
+            calculatePageSize();
+            loadInitialMessages();
+        });
     },
     { immediate: true }
 );
 
-onBeforeUnmount(stopPolling);
+socket.off('message:new', handleIncomingMessage);
+socket.on('message:new', handleIncomingMessage);
 
-defineExpose({ fetchMessages: refreshLatestMessages, loadInitialMessages });
+const handleResize = () => {
+    const previous = pageSize.value;
+    calculatePageSize();
+    if (props.channelId && pageSize.value !== previous) {
+        loadInitialMessages();
+    }
+};
+
+window.addEventListener('resize', handleResize);
+
+onBeforeUnmount(() => {
+    if (activeChannelId) {
+        socket.emit('leave-channel', { channelId: activeChannelId });
+    }
+    socket.off('message:new', handleIncomingMessage);
+    window.removeEventListener('resize', handleResize);
+});
+
+defineExpose({ loadInitialMessages });
 </script>
 
 <template>

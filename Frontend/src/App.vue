@@ -37,12 +37,6 @@ function onChannelSelected(channel) {
     selectedChannel.value = channel;
 }
 
-function onMessageSent() {
-    if (messageListRef.value) {
-        messageListRef.value.fetchMessages();
-    }
-}
-
 function handleLogout() {
     logout();
     router.push('/login');
@@ -101,7 +95,6 @@ function getCurrentTime() {
                     <MessageForm
                         :channel-id="selectedChannel?.id"
                         :current-user-id="user?.id"
-                        @message-sent="onMessageSent"
                     />
                 </div>
             </main>
@@ -119,12 +112,13 @@ function getCurrentTime() {
 
 <style>
 .app {
-    min-height: 100vh;
+    height: 100%;
+    overflow: hidden;
     background-color: var(--bg-primary);
 }
 
 .terminal {
-    min-height: 100vh;
+    height: 100%;
     display: flex;
     flex-direction: column;
     background-color: var(--bg-primary);
